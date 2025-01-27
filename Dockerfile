@@ -1,20 +1,22 @@
-FROM ghcr.io/linuxserver/baseimage-alpine:3.16
+# syntax=docker/dockerfile:1
+
+FROM ghcr.io/linuxserver/baseimage-alpine:3.21
 
 # set version label
 ARG BUILD_DATE
 ARG VERSION
 ARG HEALTHCHECKS_RELEASE
 LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
-LABEL maintainer="alex-phillips"
+LABEL maintainer="thespad"
 
 ENV PYTHONUNBUFFERED=1
 
 RUN \
   echo "**** install build packages ****" && \
-  apk add --no-cache --upgrade --virtual=build-dependencies \
+  apk add --no-cache --virtual=build-dependencies \
+    build-base \
     cargo \
     curl-dev \
-    gcc \
     jpeg-dev \
     libffi-dev \
     mariadb-dev \
@@ -23,14 +25,14 @@ RUN \
     python3-dev \
     zlib-dev && \
   echo "**** install runtime packages ****" && \
-  apk add --no-cache --upgrade \
+  apk add --no-cache \
+    grep \
     mariadb-client \
     postgresql-client \
     python3 \
-    py3-pip \
     uwsgi \
     uwsgi-python \
-    mariadb-connector-c-dev && \
+    mariadb-connector-c && \
   echo "**** install healthchecks ****" && \
   mkdir -p /app/healthchecks && \
   if [ -z ${HEALTHCHECKS_RELEASE+x} ]; then \
@@ -45,24 +47,25 @@ RUN \
     /app/healthchecks/ --strip-components=1 && \
   echo "**** install pip packages ****" && \
   cd /app/healthchecks && \
-  pip3 install -U --no-cache-dir \
+  python3 -m venv /lsiopy && \
+  pip install -U --no-cache-dir \
     pip \
     wheel && \
-  pip3 install -U --no-cache-dir --find-links https://wheel-index.linuxserver.io/alpine-3.16/ \
+  pip install -U --no-cache-dir --find-links https://wheel-index.linuxserver.io/alpine-3.21/ \
     apprise \
+    minio \
     mysqlclient && \
-  pip3 install -U --no-cache-dir --find-links https://wheel-index.linuxserver.io/alpine-3.16/ -r requirements.txt && \
+  pip install -U --no-cache-dir --find-links https://wheel-index.linuxserver.io/alpine-3.21/ -r requirements.txt && \
   cd /app/healthchecks && \
-  DEBUG=False /usr/bin/python3 ./manage.py collectstatic --noinput && \
-  DEBUG=False /usr/bin/python3 ./manage.py compress && \
-  echo "**** overlay-fs bug workaround ****" && \
-  mv /app/healthchecks /app/healthchecks-tmp && \
+  DEBUG=False python3 ./manage.py collectstatic --noinput && \
+  DEBUG=False python3 ./manage.py compress && \
+  printf "Linuxserver.io version: ${VERSION}\nBuild-date: ${BUILD_DATE}" > /build_version && \
   echo "**** cleanup ****" && \
   apk del --purge \
     build-dependencies && \
   rm -rf \
-    /root/.cache \
-    /root/.cargo \
+    $HOME/.cache \
+    $HOME/.cargo \
     /tmp/*
 
 # copy local files
@@ -70,4 +73,5 @@ COPY root/ /
 
 # ports and volumes
 EXPOSE 8000
+
 VOLUME /config
